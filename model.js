@@ -10,6 +10,7 @@
   const monthLabel = (month, year = true) => `${MONTHS[Number(month.slice(5)) - 1]}${year ? ' ' + month.slice(0,4) : ''}`;
   const months = data => data.reports.map(r => r.month).sort();
   const getReport = (data, month) => data.reports.find(r => r.month === month) || null;
+  const resolveWork = (report, id) => typeof id === 'string' ? report?.works?.find(work => work.id === id) || report?.works?.find(work => work.aliases?.includes(id)) || null : null;
   const defaultMonth = data => months(data).includes(data.project.currentMonth) ? data.project.currentMonth : months(data).at(-1);
   const rankingSeries = report => Array.isArray(report?.rankingSeries) ? report.rankingSeries : [];
   const defaultCity = report => rankingSeries(report).some(series => series.id === 'surgut') ? 'surgut' : rankingSeries(report)[0]?.id || null;
@@ -138,6 +139,45 @@
   }
   function validateData(data) {
     const errors = [], check = (test, message) => { if (!test) errors.push(message); };
+    const items = value => Array.isArray(value) ? value : [];
+    const object = value => !!value && typeof value === 'object' && !Array.isArray(value);
+    const strings = value => Array.isArray(value) && value.every(item => typeof item === 'string');
+    function validateTable(table, label) {
+      const validColumns = Array.isArray(table?.columns) && table.columns.length > 0 && table.columns.every(column => typeof column === 'string' && column.trim());
+      const validRows = Array.isArray(table?.rows) && table.rows.every(row => Array.isArray(row) && row.length === table.columns?.length && row.every(cell => typeof cell === 'string' || (typeof cell === 'number' && Number.isFinite(cell))));
+      check(object(table) && validColumns && validRows, `${label}: неверная таблица раздела.`);
+      if (object(table) && own(table,'label')) check(typeof table.label === 'string', `${label}: неверная подпись таблицы.`);
+    }
+    function validateLinks(links, label) {
+      check(Array.isArray(links), `${label}: неверный список ссылок.`);
+      for (const link of items(links)) {
+        check(object(link) && !!safeHref(link.url), `${label}: небезопасная ссылка.`);
+        if (object(link) && own(link,'label')) check(typeof link.label === 'string', `${label}: неверная подпись ссылки.`);
+      }
+    }
+    function validateWorkContent(content, label) {
+      if (own(content,'sections')) check(Array.isArray(content.sections), `${label}: неверный список разделов работы.`);
+      for (const section of items(content.sections)) {
+        check(object(section), `${label}: неверный раздел работы.`);
+        if (!object(section)) continue;
+        for (const key of ['title','text','afterText']) if (own(section,key)) check(typeof section[key] === 'string', `${label}: неверный текст раздела ${key}.`);
+        if (own(section,'bullets')) check(strings(section.bullets), `${label}: неверный список раздела.`);
+        if (own(section,'table')) validateTable(section.table,label);
+        if (own(section,'links')) validateLinks(section.links,label);
+      }
+      if (own(content,'evidence')) check(Array.isArray(content.evidence), `${label}: неверный список подтверждений.`);
+      for (const evidence of items(content.evidence)) {
+        check(object(evidence) && ['link','comparison','table'].includes(evidence.type), `${label}: неизвестное подтверждение.`);
+        if (!object(evidence)) continue;
+        for (const key of ['label','before','after']) if (own(evidence,key)) check(typeof evidence[key] === 'string', `${label}: неверный текст подтверждения.`);
+        if (evidence.type === 'link') check(!!safeHref(evidence.url), `${label}: небезопасное подтверждение.`);
+        if (evidence.type === 'table') validateTable(evidence,label);
+        if (evidence.type === 'comparison' && (own(evidence,'beforeImage') || own(evidence,'afterImage'))) {
+          check(!!safeImageHref(evidence.beforeImage) && !!safeImageHref(evidence.afterImage), `${label}: сравнение должно содержать два изображения внутри evidence.`);
+          check(['beforeAlt','afterAlt'].every(key => typeof evidence[key] === 'string' && evidence[key].trim()), `${label}: у снимков отсутствует описание.`);
+        }
+      }
+    }
     if (!data?.project || !Array.isArray(data.reports)) return ['Нет настроек проекта или месяцев.'];
     check(data.project.id === 'niko-m' && data.project.website === 'https://niko-m.ru/', 'Неверный проект отчёта.');
     check(months(data).includes(data.project.currentMonth), 'Текущий месяц отсутствует.');
@@ -147,6 +187,7 @@
       check(report.projectId === data.project.id && /^\d{4}-(0[1-9]|1[0-2])$/.test(label), 'Неверный идентификатор месяца.');
       check(['in_progress','closed'].includes(report.status), `${label}: неизвестное состояние отчёта.`);
       for (const key of ['intro','conclusions']) check(Array.isArray(report[key]) && report[key].every(x => typeof x === 'string'), `${label}: неверный текст ${key}.`);
+      if (own(report,'worksIntro')) check(strings(report.worksIntro), `${label}: неверный текст worksIntro.`);
       check(!(report.archive && (report.rankings || rankingSeries(report).length)), `${label}: архив смешан с API.`);
       if (own(report,'rankingSeries')) {
         check(Array.isArray(report.rankingSeries), `${label}: неверный список городов.`);
@@ -212,36 +253,33 @@
         for (const week of traffic.weekly || []) check(validDate(week.from) && validDate(week.to) && week.from <= week.to && ['visits','google','yandex','other'].every(key => Number.isInteger(week[key]) && week[key] >= 0), `${label}: неверная неделя трафика.`);
       }
       check(Array.isArray(report.works), `${label}: отсутствует список работ.`);
-      check(new Set((report.works || []).map(w => w.id)).size === report.works?.length, `${label}: повторные работы.`);
-      for (const work of report.works || []) {
+      check(new Set(items(report.works).map(w => w?.id)).size === report.works?.length, `${label}: повторные работы.`);
+      const workReferences = new Set(items(report.works).map(work => work?.id));
+      for (const work of items(report.works)) {
+        check(object(work), `${label}: неверная работа.`);
+        if (!object(work)) continue;
         check(['id','title','summary','result'].every(k => typeof work[k] === 'string' && work[k].trim()), `${label}: неполная работа.`);
         check(work.why === null || typeof work.why === 'string', `${label}: неверное пояснение работы.`);
-        for (const section of work.sections || []) {
-          const validSection = !!section && typeof section === 'object' && !Array.isArray(section);
-          check(validSection, `${label}: неверный раздел работы.`);
-          if (!validSection) continue;
-          if (own(section,'title')) check(typeof section.title === 'string', `${label}: неверный заголовок раздела.`);
-          if (own(section,'afterText')) check(typeof section.afterText === 'string', `${label}: неверный текст после таблицы.`);
-          if (own(section,'table')) {
-            const table = section.table;
-            const validColumns = Array.isArray(table?.columns) && table.columns.length > 0 && table.columns.every(column => typeof column === 'string' && column.trim());
-            const validRows = Array.isArray(table?.rows) && table.rows.every(row => Array.isArray(row) && row.length === table.columns?.length && row.every(cell => typeof cell === 'string' || (typeof cell === 'number' && Number.isFinite(cell))));
-            check(!!table && typeof table === 'object' && !Array.isArray(table) && validColumns && validRows, `${label}: неверная таблица раздела.`);
-            if (table && own(table,'label')) check(typeof table.label === 'string', `${label}: неверная подпись таблицы.`);
+        if (own(work,'resultBullets')) check(strings(work.resultBullets), `${label}: неверный список результата.`);
+        if (own(work,'publicationStatus')) check(['published','preview'].includes(work.publicationStatus), `${label}: неизвестный статус публикации работы.`);
+        if (own(work,'aliases')) {
+          check(strings(work.aliases) && work.aliases.every(alias => alias.trim()), `${label}: неверные прежние адреса работы.`);
+          for (const alias of items(work.aliases)) {
+            check(!workReferences.has(alias), `${label}: повторный адрес работы или совпадение с ID.`);
+            workReferences.add(alias);
           }
-          for (const link of section.links || []) check(!!safeHref(link.url), `${label}: небезопасная ссылка.`);
         }
-        for (const evidence of work.evidence || []) {
-          check(['link','comparison','table'].includes(evidence.type), `${label}: неизвестное подтверждение.`);
-          if (evidence.type === 'link') check(!!safeHref(evidence.url), `${label}: небезопасное подтверждение.`);
-          if (evidence.type === 'comparison' && (own(evidence,'beforeImage') || own(evidence,'afterImage'))) {
-            check(!!safeImageHref(evidence.beforeImage) && !!safeImageHref(evidence.afterImage), `${label}: сравнение должно содержать два изображения внутри evidence.`);
-            check(['beforeAlt','afterAlt'].every(key => typeof evidence[key] === 'string' && evidence[key].trim()), `${label}: у снимков отсутствует описание.`);
-          }
+        validateWorkContent(work,label);
+        if (own(work,'appendices')) check(Array.isArray(work.appendices), `${label}: неверный список приложений.`);
+        for (const appendix of items(work.appendices)) {
+          check(object(appendix) && typeof appendix.title === 'string' && appendix.title.trim(), `${label}: неверный заголовок приложения.`);
+          if (!object(appendix)) continue;
+          if (own(appendix,'text')) check(typeof appendix.text === 'string', `${label}: неверный текст приложения.`);
+          validateWorkContent(appendix,label);
         }
       }
     }
     return errors;
   }
-  return {ENGINES, months, monthLabel, getReport, defaultMonth, rankingSeries, defaultCity, getRankingSeries, reportForCity, safeHref, safeImageHref, validDate, normalize, rankChange, settingsContext, sameSettings, observation, rankingsView, filterRows, topShare, validateData};
+  return {ENGINES, months, monthLabel, getReport, resolveWork, defaultMonth, rankingSeries, defaultCity, getRankingSeries, reportForCity, safeHref, safeImageHref, validDate, normalize, rankChange, settingsContext, sameSettings, observation, rankingsView, filterRows, topShare, validateData};
 });

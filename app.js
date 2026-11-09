@@ -19,6 +19,7 @@
   const state = {month:M.defaultMonth(data),city:M.defaultCity(M.getReport(data,M.defaultMonth(data))),tab:'results',detail:null,filters:{search:'',direction:'',trend:'all',cohort:'all'},limit:25,engine:'yandex'};
   let view = null, report = null, positionColumns = null, renderedReport = null, currentDetail = null, lastOpener = null;
   const linkHTML = item => M.safeHref(item.url) ? `<a href="${esc(M.safeHref(item.url))}" target="_blank" rel="noopener noreferrer">${esc(item.label || item.url)}${icon('external')}</a>` : esc(item.label || 'Ссылка недоступна');
+  const publicationLabel = work => ({published:'Основной сайт',preview:'Тестовая версия'}[work.publicationStatus] || '');
   function readRoute() {
     const url = new URL(location.href), month = url.searchParams.get('month'), tab = url.hash.slice(1);
     const selectedMonth = months.includes(month) ? month : M.defaultMonth(data);
@@ -35,7 +36,8 @@
     if (changes.month && changes.month !== state.month || ownCityChange(changes)) { state.filters = {search:'',direction:'',trend:'all',cohort:'all'}; state.limit = 25; }
     Object.assign(state, changes);
     state.city = M.getRankingSeries(M.getReport(data,state.month),state.city)?.id || null;
-    if (state.detail && (state.tab !== 'works' || !hasWorkDetails(state.month) || !M.getReport(data,state.month)?.works.some(w => w.id === state.detail))) state.detail = null;
+    const work = M.resolveWork(M.getReport(data,state.month),state.detail);
+    state.detail = state.tab === 'works' && hasWorkDetails(state.month) ? work?.id || null : null;
     try { history[replace ? 'replaceState' : 'pushState'](null,'',routeURL()); } catch (_) {}
     render(); if (focusTab) $('tab-' + state.tab).focus({preventScroll:true});
   }
@@ -182,14 +184,14 @@
   function worksHTML() {
     if (!report.works.length) return pendingHTML('works');
     const details = hasWorkDetails(state.month);
-    return `<div class="works-heading"><h2>Работы за ${M.monthLabel(state.month).toLowerCase()}</h2></div><section class="surface"><table class="works-table${details ? '' : ' without-details'}"><thead><tr><th scope="col">Что сделали</th><th scope="col">Краткое описание</th><th scope="col">Для чего это нужно</th>${details ? '<th scope="col">Подробнее</th>' : ''}</tr></thead><tbody>${report.works.map(work => `<tr><td><h3 class="work-name">${esc(work.title)}</h3></td><td class="work-summary">${esc(work.summary)}</td><td data-label="Для чего это нужно">${work.why ? paragraphsHTML(work.why) : '—'}</td>${details ? `<td><button type="button" class="work-open" data-work="${esc(work.id)}" aria-label="Подробнее: ${esc(work.title)}">Подробнее${icon('arrow')}</button></td>` : ''}</tr>`).join('')}</tbody></table></section>`;
+    return `<div class="works-heading"><h2>Работы за ${M.monthLabel(state.month).toLowerCase()}</h2>${(report.worksIntro || []).map(paragraphsHTML).join('')}</div><section class="surface"><table class="works-table${details ? '' : ' without-details'}"><thead><tr><th scope="col">Что сделали</th><th scope="col">Краткое описание</th><th scope="col">Для чего это нужно</th>${details ? '<th scope="col">Подробнее</th>' : ''}</tr></thead><tbody>${report.works.map(work => `<tr><td><h3 class="work-name">${esc(work.title)}</h3>${publicationLabel(work) ? `<span class="work-publication-status">${publicationLabel(work)}</span>` : ''}</td><td class="work-summary">${esc(work.summary)}</td><td data-label="Для чего это нужно">${work.why ? paragraphsHTML(work.why) : '—'}</td>${details ? `<td><button type="button" class="work-open" data-work="${esc(work.id)}" aria-label="Подробнее: ${esc(work.title)}">Подробнее${icon('arrow')}</button></td>` : ''}</tr>`).join('')}</tbody></table></section>`;
   }
   function tableHTML(item, emphasize = false) {
     const isUrlMap = item.rows.length > 0 && item.rows.every(row => row.length === 3 && [row[1],row[2]].every(value => typeof value === 'string' && value.startsWith('/')));
     const content = emphasize ? strongHTML : esc;
     return `<div class="table-scroll" role="region" aria-label="${esc(item.label)}"${isUrlMap ? '' : ' tabindex="0"'}><table class="evidence-table${isUrlMap ? ' evidence-url-map' : ''}" role="table"><thead role="rowgroup"><tr role="row">${item.columns.map(c => `<th scope="col" role="columnheader">${content(c)}</th>`).join('')}</tr></thead><tbody role="rowgroup">${item.rows.map(row => `<tr role="row">${item.columns.map((column,i) => `<td data-label="${esc(column)}" role="cell">${isUrlMap && i > 0 ? content(row[i]).replaceAll('/','/<wbr>').replaceAll('-','-<wbr>') : content(row[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
-  function evidenceHTML(item) {
+  function evidenceHTML(item, expanded = true) {
     if (item.type === 'link') return `<p class="detail-resource">${linkHTML(item)}</p>`;
     let body = '';
     const hasImages = item.type === 'comparison' && M.safeImageHref(item.beforeImage) && M.safeImageHref(item.afterImage);
@@ -198,10 +200,13 @@
       body = `<div class="comparison-grid${hasImages ? ' has-images' : ''}">${sideHTML('before','Было')}${sideHTML('after','Стало')}</div>`;
     }
     if (item.type === 'table') body = tableHTML(item);
-    return `<details class="evidence-block"${hasImages || item.type === 'table' ? ' open' : ''}><summary>${esc(item.label)}</summary><div class="evidence-content">${body}</div></details>`;
+    return `<details class="evidence-block"${expanded && (hasImages || item.type === 'table') ? ' open' : ''}><summary>${esc(item.label)}</summary><div class="evidence-content">${body}</div></details>`;
   }
   function sectionHTML(section) {
     return `<section class="detail-section">${section.title?.trim() ? `<h3>${esc(section.title)}</h3>` : ''}${detailParagraphsHTML(section.text)}${section.bullets?.length ? `<ul>${section.bullets.map(b => `<li>${strongHTML(b)}</li>`).join('')}</ul>` : ''}${section.table ? tableHTML({...section.table,label:section.table.label || section.title || 'Таблица'},true) : ''}${detailParagraphsHTML(section.afterText)}${section.links?.length ? `<ul class="detail-links">${section.links.map(l => `<li>${linkHTML(l)}</li>`).join('')}</ul>` : ''}</section>`;
+  }
+  function appendixHTML(appendix) {
+    return `<details class="evidence-block work-appendix"><summary>${esc(appendix.title)}</summary><div class="evidence-content">${appendix.text ? sectionHTML({text:appendix.text}) : ''}${(appendix.sections || []).map(sectionHTML).join('')}${(appendix.evidence || []).map(item => evidenceHTML(item,false)).join('')}</div></details>`;
   }
   function renderDetail() {
     const work = state.tab === 'works' && hasWorkDetails(state.month) && report.works.find(w => w.id === state.detail);
@@ -211,9 +216,10 @@
       currentDetail = null; return;
     }
     if (key === currentDetail && dialog.open) return;
-    dialog.dataset.reportView = 'works'; $('detail-title').textContent = work.title; $('detail-meta').hidden = true;
+    dialog.dataset.reportView = 'works'; $('detail-title').textContent = work.title;
+    $('detail-meta').textContent = publicationLabel(work); $('detail-meta').hidden = !publicationLabel(work);
     const sections = (work.sections || []).map(sectionHTML).join('');
-    $('detail-body').innerHTML = `<section class="actual-result"><h3>Что сделали</h3>${detailParagraphsHTML(work.result)}${work.resultBullets?.length ? `<ul class="result-bullets">${work.resultBullets.map(b => `<li>${strongHTML(b)}</li>`).join('')}</ul>` : ''}${sections}${(work.evidence || []).map(evidenceHTML).join('')}</section>`;
+    $('detail-body').innerHTML = `<section class="actual-result"><h3>Что сделали</h3>${detailParagraphsHTML(work.result)}${work.resultBullets?.length ? `<ul class="result-bullets">${work.resultBullets.map(b => `<li>${strongHTML(b)}</li>`).join('')}</ul>` : ''}${sections}${(work.evidence || []).map(item => evidenceHTML(item)).join('')}${(work.appendices || []).map(appendixHTML).join('')}</section>`;
     if (!dialog.open) { dialog.showModal(); document.body.classList.add('dialog-open'); }
     $('detail-body').scrollTop = 0; $('close-detail').focus({preventScroll:true}); currentDetail = key;
   }
