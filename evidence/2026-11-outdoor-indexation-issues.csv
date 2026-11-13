@@ -1,0 +1,16 @@
+﻿Проблема;Где найдено;Пример URL;HTTP или фактический canonical;Что изменить
+Адрес корня в sitemap;sitemap-menu.xml;https://niko-m.ru/outdoor-ad;https://niko-m.ru/outdoor-ad/ → HTTP 200;Указать в карте версию /outdoor-ad/ со слешем.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/adygeisk;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/alusta;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/esto-sadok;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/feodosiya;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/ishim;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/nadym;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/pokachi;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Регистр адреса Симеиза;Городская форматная страница;https://niko-m.ru/outdoor-ad/reklamniy-shit-3x6-simeiz;https://niko-m.ru/outdoor-ad/reklamniy-shit-3x6-Simeiz → HTTP 404;Формировать canonical в нижнем регистре, на рабочий URL с HTTP 200.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/roza-khutor;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Регистр адреса Симеиза;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/simeiz;https://niko-m.ru/outdoor-ad/Simeiz → HTTP 301 → https://niko-m.ru/outdoor-ad/simeiz;Формировать canonical в нижнем регистре, на рабочий URL с HTTP 200.
+Городская карта сайта;sitemap-cities-outdoor-ad.xml;https://niko-m.ru/outdoor-ad/sudak;404;Удалить URL из карты на время отсутствия активных поверхностей.
+Пагинация;HTML каталога;https://niko-m.ru/outdoor-ad/?city=&page=2;https://niko-m.ru/outdoor-ad/;Для обычных страниц 2 и далее указывать собственный канонический URL с номером страницы. Убирать значения фильтров по умолчанию из ссылок.
+Пагинация;HTML каталога;https://niko-m.ru/outdoor-ad/?city=1&discount=0&sort=recommended&page=2;https://niko-m.ru/outdoor-ad/;Для обычных страниц 2 и далее указывать собственный канонический URL с номером страницы. Убирать значения фильтров по умолчанию из ссылок.
+Пагинация;HTML каталога;https://niko-m.ru/outdoor-ad/surgut?page=2;https://niko-m.ru/outdoor-ad/surgut;Для обычных страниц 2 и далее указывать собственный канонический URL с номером страницы. Убирать значения фильтров по умолчанию из ссылок.
